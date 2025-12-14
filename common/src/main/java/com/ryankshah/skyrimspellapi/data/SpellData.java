@@ -22,6 +22,9 @@ import java.util.Map;
 public class SpellData
 {
     public static MapCodec<SpellData> CODEC = RecordCodecBuilder.mapCodec(SpellDataInstance -> SpellDataInstance.group(
+            Codec.FLOAT.fieldOf("magicka").forGetter(SpellData::getMagicka),
+            Codec.FLOAT.fieldOf("maxMagicka").forGetter(SpellData::getMaxMagicka),
+            Codec.FLOAT.fieldOf("magickaRegenModifier").forGetter(SpellData::getMagickaRegenModifier),
             SpellRegistry.SPELLS_REGISTRY.byNameCodec().listOf().fieldOf("knownSpells").forGetter(SpellData::getKnownSpells),
             SpellRegistry.SPELLS_REGISTRY.byNameCodec().fieldOf("selectedSpell1").forGetter(SpellData::getSelectedSpell1),
             SpellRegistry.SPELLS_REGISTRY.byNameCodec().fieldOf("selectedSpell2").forGetter(SpellData::getSelectedSpell2),
@@ -29,6 +32,12 @@ public class SpellData
     ).apply(SpellDataInstance, SpellData::new));
 
     public static final StreamCodec<RegistryFriendlyByteBuf, SpellData> STREAM_CODEC = StreamCodec.composite(
+            ByteBufCodecs.FLOAT,
+            SpellData::getMagicka,
+            ByteBufCodecs.FLOAT,
+            SpellData::getMaxMagicka,
+            ByteBufCodecs.FLOAT,
+            SpellData::getMagickaRegenModifier,
             ByteBufCodecs.idMapper(SpellRegistry.SPELLS_REGISTRY).apply(ByteBufCodecs.list()),
             SpellData::getKnownSpells,
             ByteBufCodecs.idMapper(SpellRegistry.SPELLS_REGISTRY),
@@ -40,6 +49,7 @@ public class SpellData
             SpellData::new
     );
 
+    private float magicka, maxMagicka, magickaRegenModifier;
     private List<Spell> knownSpells;
     private Spell selectedSpell1;
     private Spell selectedSpell2;
@@ -47,6 +57,9 @@ public class SpellData
 
     public SpellData() {
         this(
+                50.0f,
+                50.0f,
+                1.0f,
                 new ArrayList<>(),
                 SpellRegistry.EMPTY_SPELL.get(),
                 SpellRegistry.EMPTY_SPELL.get(),
@@ -55,12 +68,34 @@ public class SpellData
     }
 
     public SpellData(
+            float magicka, float maxMagicka, float magickaRegenModifier,
             List<Spell> spells, Spell selectedSpell1, Spell selectedSpell2, Map<Spell, Float> cooldowns
             ) {
         this.knownSpells = new ArrayList<>(spells);
         this.selectedSpell1 = selectedSpell1;
         this.selectedSpell2 = selectedSpell2;
         this.spellsOnCooldown = new HashMap<>(cooldowns);
+    }
+
+    public float getMagicka() {
+        return this.magicka;
+    }
+    public void setMagicka(float magicka) {
+        this.magicka = magicka;
+    }
+
+    public float getMaxMagicka() {
+        return this.maxMagicka;
+    }
+    public void setMaxMagicka(float maxMagicka) {
+        this.maxMagicka = maxMagicka;
+    }
+
+    public float getMagickaRegenModifier() {
+        return this.magickaRegenModifier;
+    }
+    public void setMagickaRegenModifier(float modifier) {
+        this.magickaRegenModifier = modifier;
     }
 
     public void addNewSpell(Spell spell) {

@@ -4,6 +4,7 @@ import com.ryankshah.skyrimspellapi.client.screen.MagicScreen;
 import com.ryankshah.skyrimspellapi.client.screen.SkyrimGuiOverlay;
 import com.ryankshah.skyrimspellapi.data.SpellData;
 import com.ryankshah.skyrimspellapi.network.spell.CastSpell;
+import com.ryankshah.skyrimspellapi.network.spell.ConsumeMagicka;
 import com.ryankshah.skyrimspellapi.network.spell.UpdateShoutCooldown;
 import com.ryankshah.skyrimspellapi.registry.KeysRegistry;
 import com.ryankshah.skyrimspellapi.spell.Spell;
@@ -48,7 +49,7 @@ public class SpellApiFabricClient implements ClientModInitializer
         HudRenderCallback.EVENT.register((guiGraphics, deltaTime) -> {
             spells.render(guiGraphics, deltaTime);
         });
-        
+
         ClientTickEvents.END_CLIENT_TICK.register(this::handleClientTicks);
     }
 
@@ -63,13 +64,11 @@ public class SpellApiFabricClient implements ClientModInitializer
                     if (entry.getValue() <= 0f) {
                         final UpdateShoutCooldown updateShoutCooldown = new UpdateShoutCooldown(SpellRegistry.SPELLS_REGISTRY.getResourceKey(entry.getKey()).get(), 0f);
                         Dispatcher.sendToServer(updateShoutCooldown);
-//                            PacketDistributor.SERVER.noArg().send(updateShoutCooldown);
                     }
                     if (entry.getValue() > 0f) {
                         float cooldown = spellData.getSpellCooldown(entry.getKey());
                         final UpdateShoutCooldown updateShoutCooldown = new UpdateShoutCooldown(SpellRegistry.SPELLS_REGISTRY.getResourceKey(entry.getKey()).get(), cooldown - 0.05f);
                         Dispatcher.sendToServer(updateShoutCooldown);
-//                            PacketDistributor.SERVER.noArg().send(updateShoutCooldown);
                     }
                 }
             }
@@ -79,8 +78,6 @@ public class SpellApiFabricClient implements ClientModInitializer
             mc.setScreen(new MagicScreen(spellData.getKnownSpells()));
             return;
         }
-
-        if (mc.screen != null) return;
 
         if (mc.screen != null) return;
 
@@ -115,9 +112,15 @@ public class SpellApiFabricClient implements ClientModInitializer
                 startChargingShout(spell, spellData, spellSlot);
             } else if(spell.getType() == Spell.SpellType.POWERS) {
                 castSpell(spell, spellData, true);
+            } else if (hasSufficientMagicka(spell, spellData)) {
+                castSpell(spell, spellData, true);
+                consumeMagicka(spell, spellData);
+            } else {
+                displayInsufficientMagickaMessage();
+                setCanCastSpell(spellSlot, false);
             }
         } else {
-            Minecraft.getInstance().player.displayClientMessage(Component.translatable("skyrimcraft.spell.noselect"), false);
+            Minecraft.getInstance().player.displayClientMessage(Component.translatable("skyrimspellapi.spell.noselect"), false);
         }
     }
 
@@ -125,16 +128,25 @@ public class SpellApiFabricClient implements ClientModInitializer
         int ticksHeld = spellSlot == 1 ? spell1TicksHeld : spell2TicksHeld;
         ticksHeld++;
 
-        if (spell.getType() == Spell.SpellType.SHOUT) {
+        if (spell.isContinuous() && hasSufficientMagicka(spell, spellData)) {
+            castSpell(spell, spellData, false);
+
+            if (ticksHeld % TICK_INTERVAL == 0) {
+                consumeMagicka(spell, spellData);
+            }
+        } else if (spell.getType() == Spell.SpellType.SHOUT) {
             updateShoutCharge(spell, spellData, spellSlot);
+        } else if (!hasSufficientMagicka(spell, spellData)) {
+            displayInsufficientMagickaMessage();
+            setCanCastSpell(spellSlot, false);
         }
+
         if (spellSlot == 1) {
             spell1TicksHeld = ticksHeld;
         } else {
             spell2TicksHeld = ticksHeld;
         }
     }
-
 
     private static void processSpellFinish(Spell spell, SpellData spellData, int spellSlot) {
         if (spell.getType() == Spell.SpellType.SHOUT) {
@@ -147,7 +159,7 @@ public class SpellApiFabricClient implements ClientModInitializer
 
     private static void startChargingShout(Spell spell, SpellData spellData, int spellSlot) {
         if (spellData.getSpellCooldown(spell) > 0f) {
-            Minecraft.getInstance().player.displayClientMessage(Component.translatable("skyrimcraft.shout.cooldown"), false);
+            Minecraft.getInstance().player.displayClientMessage(Component.translatable("skyrimspellapi.shout.cooldown"), false);
             return;
         }
 
@@ -191,6 +203,26 @@ public class SpellApiFabricClient implements ClientModInitializer
     private static void castSpell(Spell spell, SpellData spellData, boolean isInitialCast) {
         final CastSpell castSpell = new CastSpell(SpellRegistry.SPELLS_REGISTRY.getResourceKey(spell).get());
         Dispatcher.sendToServer(castSpell);
+
+        if (isInitialCast || !spell.isContinuous()) {
+            consumeMagicka(spell, spellData);
+        }
+    }
+
+    private static void consumeMagicka(Spell spell, SpellData spellData) {
+        float cost = spell.getCost();
+        if (spellData.getMagicka() >= cost) {
+            final ConsumeMagicka consumeMagicka = new ConsumeMagicka(cost);
+            Dispatcher.sendToServer(consumeMagicka);
+        }
+    }
+
+    private static boolean hasSufficientMagicka(Spell spell, SpellData spellData) {
+        return spellData.getMagicka() >= spell.getCost();
+    }
+
+    private static void displayInsufficientMagickaMessage() {
+        Minecraft.getInstance().player.displayClientMessage(Component.translatable("skyrimspellapi.spell.no_magicka"), false);
     }
 
     private static void setCanCastSpell(int spellSlot, boolean canCast) {
@@ -200,7 +232,6 @@ public class SpellApiFabricClient implements ClientModInitializer
             canCastSpell2 = canCast;
         }
     }
-
 
     private static void hideShoutBar() {
         SkyrimGuiOverlay.setShoutChargeProgress(0.0f);

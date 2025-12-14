@@ -45,6 +45,16 @@ public class PlayerEvents
             }
         }
 
+        if (character.getMagicka() < character.getMaxMagicka()) {
+            if (playerEntity.tickCount % 20 == 0) {
+                // If in combat, regenerate 1% of max magicka, else 3%
+                if (playerEntity.getCombatTracker().lastDamageTime > 20 * 3)
+                    character.setMagicka(character.getMagicka() + ((0.01f * character.getMaxMagicka()) * character.getMagickaRegenModifier()));
+                else
+                    character.setMagicka(character.getMagicka() + ((0.03f * character.getMaxMagicka()) * character.getMagickaRegenModifier()));
+            }
+        }
+
         if(Minecraft.getInstance().getConnection() == null)
             return;
     }

@@ -5,6 +5,7 @@ import com.ryankshah.skyrimspellapi.client.SkyrimGuiOverlayNeo;
 import com.ryankshah.skyrimspellapi.client.screen.MagicScreen;
 import com.ryankshah.skyrimspellapi.data.SpellData;
 import com.ryankshah.skyrimspellapi.network.spell.CastSpell;
+import com.ryankshah.skyrimspellapi.network.spell.ConsumeMagicka;
 import com.ryankshah.skyrimspellapi.platform.Services;
 import com.ryankshah.skyrimspellapi.registry.KeysRegistry;
 import com.ryankshah.skyrimspellapi.spell.Spell;
@@ -40,6 +41,7 @@ public class InputEvents {
         SpellData character = Services.PLATFORM.getSpellData(mc.player);
 
         while (KeysRegistry.MENU_KEY.get().consumeClick()) {
+            System.out.println(character.getKnownSpells());
             mc.setScreen(new MagicScreen(character.getKnownSpells()));
             return;
         }
@@ -48,28 +50,6 @@ public class InputEvents {
 
         handleSpellCasting(character, KeysRegistry.SPELL_SLOT_1_KEY.get(), 1);
         handleSpellCasting(character, KeysRegistry.SPELL_SLOT_2_KEY.get(), 2);
-
-        // Handle spell slot 1 (left hand)
-//        boolean spell1KeyIsDown = KeysRegistry.SPELL_SLOT_1_KEY.get().isDown();
-//        if (spell1KeyIsDown && !spell1KeyWasDown) {
-//            processSpellStart(character.getSelectedSpell1(), character, 1);
-//        } else if (spell1KeyWasDown && !spell1KeyIsDown) {
-//            processSpellFinish(character.getSelectedSpell1(), character, 1);
-//        } else if (spell1KeyIsDown) {
-//            processSpellContinue(character.getSelectedSpell1(), character, 1);
-//        }
-//        spell1KeyWasDown = spell1KeyIsDown;
-//
-//        // Handle spell slot 2 (right hand)
-//        boolean spell2KeyIsDown = KeysRegistry.SPELL_SLOT_2_KEY.get().isDown();
-//        if (spell2KeyIsDown && !spell2KeyWasDown) {
-//            processSpellStart(character.getSelectedSpell2(), character, 2);
-//        } else if (spell2KeyWasDown && !spell2KeyIsDown) {
-//            processSpellFinish(character.getSelectedSpell2(), character, 2);
-//        } else if (spell2KeyIsDown) {
-//            processSpellContinue(character.getSelectedSpell2(), character, 2);
-//        }
-//        spell2KeyWasDown = spell2KeyIsDown;
     }
 
     private static void handleSpellCasting(SpellData character, KeyMapping key, int spellSlot) {
@@ -99,9 +79,15 @@ public class InputEvents {
                 startChargingShout(spell, character, spellSlot);
             } else if(spell.getType() == Spell.SpellType.POWERS) {
                 castSpell(spell, character, true);
+            } else if (hasSufficientMagicka(spell, character)) {
+                castSpell(spell, character, true);
+                consumeMagicka(spell, character);
+            } else {
+                displayInsufficientMagickaMessage();
+                setCanCastSpell(spellSlot, false);
             }
         } else {
-            Minecraft.getInstance().player.displayClientMessage(Component.translatable("skyrimcraft.spell.noselect"), false);
+            Minecraft.getInstance().player.displayClientMessage(Component.translatable("skyrimspellapi.spell.noselect"), false);
         }
     }
 
@@ -109,8 +95,17 @@ public class InputEvents {
         int ticksHeld = spellSlot == 1 ? spell1TicksHeld : spell2TicksHeld;
         ticksHeld++;
 
-        if (spell.getType() == Spell.SpellType.SHOUT) {
+        if (spell.isContinuous() && hasSufficientMagicka(spell, character)) {
+            castSpell(spell, character, false);
+
+            if (ticksHeld % TICK_INTERVAL == 0) {
+                consumeMagicka(spell, character);
+            }
+        } else if (spell.getType() == Spell.SpellType.SHOUT) {
             updateShoutCharge(spell, character, spellSlot);
+        } else if (!hasSufficientMagicka(spell, character)) {
+            displayInsufficientMagickaMessage();
+            setCanCastSpell(spellSlot, false);
         }
 
         if (spellSlot == 1) {
@@ -119,7 +114,6 @@ public class InputEvents {
             spell2TicksHeld = ticksHeld;
         }
     }
-
 
     private static void processSpellFinish(Spell spell, SpellData character, int spellSlot) {
         if (spell.getType() == Spell.SpellType.SHOUT) {
@@ -132,7 +126,7 @@ public class InputEvents {
 
     private static void startChargingShout(Spell spell, SpellData character, int spellSlot) {
         if (character.getSpellCooldown(spell) > 0f) {
-            Minecraft.getInstance().player.displayClientMessage(Component.translatable("skyrimcraft.shout.cooldown"), false);
+            Minecraft.getInstance().player.displayClientMessage(Component.translatable("skyrimspellapi.shout.cooldown"), false);
             return;
         }
 
@@ -176,6 +170,26 @@ public class InputEvents {
     private static void castSpell(Spell spell, SpellData character, boolean isInitialCast) {
         final CastSpell castSpell = new CastSpell(SpellRegistry.SPELLS_REGISTRY.getResourceKey(spell).get());
         Dispatcher.sendToServer(castSpell);
+
+        if (isInitialCast || !spell.isContinuous()) {
+            consumeMagicka(spell, character);
+        }
+    }
+
+    private static void consumeMagicka(Spell spell, SpellData character) {
+        float cost = spell.getCost();
+        if (character.getMagicka() >= cost) {
+            final ConsumeMagicka consumeMagicka = new ConsumeMagicka(cost);
+            Dispatcher.sendToServer(consumeMagicka);
+        }
+    }
+
+    private static boolean hasSufficientMagicka(Spell spell, SpellData character) {
+        return character.getMagicka() >= spell.getCost();
+    }
+
+    private static void displayInsufficientMagickaMessage() {
+        Minecraft.getInstance().player.displayClientMessage(Component.translatable("skyrimspellapi.spell.no_magicka"), false);
     }
 
     private static void setCanCastSpell(int spellSlot, boolean canCast) {
@@ -185,7 +199,6 @@ public class InputEvents {
             canCastSpell2 = canCast;
         }
     }
-
 
     private static void hideShoutBar() {
         SkyrimGuiOverlayNeo.setShoutChargeProgress(0.0f);

@@ -11,6 +11,7 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
+import org.joml.Matrix3x2fStack;
 
 import java.util.Map;
 
@@ -50,6 +51,8 @@ public class SkyrimGuiOverlay
             int scaledHeight = window.getGuiScaledHeight();
 
             SpellData character = SpellData.get(mc.player);
+
+            renderMagickaBar(guiGraphics, partialTick);
 
             Spell selectedSpell1 = character.getSelectedSpell1();
             Spell selectedSpell2 = character.getSelectedSpell2();
@@ -128,6 +131,20 @@ public class SkyrimGuiOverlay
             // Render shout name
             String shoutName = spellLocation == 1 ? character.getSelectedSpell1().getShoutName() : character.getSelectedSpell2().getShoutName();
             guiGraphics.drawCenteredString(Minecraft.getInstance().font, shoutName, scaledWidth / 2, barY - 20, 0xFFFFFFFF);
+        }
+
+        public void renderMagickaBar(GuiGraphics guiGraphics, DeltaTracker partialTick) {
+            Matrix3x2fStack poseStack = guiGraphics.pose();
+            Minecraft mc = Minecraft.getInstance();
+            Window window = mc.getWindow();
+            int scaledWidth = window.getGuiScaledWidth();
+            int scaledHeight = window.getGuiScaledHeight();
+            SpellData character = SpellData.get(mc.player);
+            float magickaPercentage = character.getMagicka() / character.getMaxMagicka();
+            float magickaBarWidth = PLAYER_BAR_MAX_WIDTH * magickaPercentage;
+
+            guiGraphics.blit(RenderPipelines.GUI_TEXTURED, OVERLAY_ICONS, 20, scaledHeight - 40, 0, 51, 102, 10, 256, 256, 1, 1);
+            guiGraphics.blit(RenderPipelines.GUI_TEXTURED, OVERLAY_ICONS, 32, scaledHeight - 38, 12 + ((PLAYER_BAR_MAX_WIDTH - magickaBarWidth) / 2.0f), 64, (int)(78 * magickaPercentage), 6, 256, 256, 1, 1);
         }
     }
 }

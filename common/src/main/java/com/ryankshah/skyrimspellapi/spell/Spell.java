@@ -183,7 +183,12 @@ public abstract class Spell
 
 //        if(getCastReference() == CastReference.CHARGE) // TODO: Implement check for charging reference etc.
 
-        return spellData.getSpellCooldown(this) <= 0f ? CastResult.SUCCESS : CastResult.COOLDOWN;
+//        return spellData.getSpellCooldown(this) <= 0f ? CastResult.SUCCESS : CastResult.COOLDOWN;
+        if(getType() == SpellType.SHOUT || getType() == SpellType.POWERS) {
+            return spellData.getSpellCooldown(this) <= 0f ? CastResult.SUCCESS : CastResult.COOLDOWN;
+        } else {
+            return (spellData.getMagicka() >= getCost() || getCooldown() == 0f) ? CastResult.SUCCESS : CastResult.MAGICKA;
+        }
     }
 
     /**
